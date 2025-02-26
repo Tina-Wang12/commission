@@ -1,0 +1,35 @@
+import airflow
+from airflow import DAG
+from airflow.providers.ssh.operators.ssh import SSHOperator
+from airflow.contrib.hooks.ssh_hook import SSHHook
+from datetime import datetime,timedelta
+
+
+ssh_hook = SSHHook(ssh_conn_id="test_spark", cmd_timeout=None)
+
+
+args = {
+    'owner': 'BELL',
+    'depends_on_past': False,
+    'start_date': datetime(2024,10,29,10,00,00,0),
+    'email': 'cliu@oslrs.com',
+    'email_on_retry': False,
+    'retries': 2,
+    'max_active_runs_per_dag': 1,
+    'concurrency': 1,
+    'retry_delay': timedelta(minutes=1),
+    'catchup':False,
+}
+
+dag = DAG(dag_id='ca_bell_salesfeed_ingest_daily',
+          default_args=args,
+          schedule_interval='00 10 * * *',
+          catchup = False,
+          max_active_runs=1,
+          tags=['CA', 'Daily','DS Team','AM','PROD','BELL','SPARK'],)
+
+with dag:
+    bell_salesfeed = SSHOperator(task_id='bell_salesfeed',ssh_hook=ssh_hook,command='/opt/spark/bin/spark-submit --driver-memory 2G --executor-memory 2G --num-executors 4 --executor-cores 4 /home/spark/belladp/dev/bell_salesfeed.py')
+    bell_salesfeed_weekly_job = SSHOperator(task_id='bell_salesfeed_weekly_job', ssh_hook=ssh_hook,command='/opt/spark/bin/spark-submit --driver-memory 2G --executor-memory 2G --num-executors 4 --executor-cores 4 /home/spark/belladp/dev/bell_salesfeed_weekly_job_v1.2.py')
+    bell_chargeback = SSHOperator(task_id='bell_chargeback',ssh_hook=ssh_hook,command='/opt/spark/bin/spark-submit --driver-memory 2G --executor-memory 2G --num-executors 4 --executor-cores 4 /home/spark/belladp/dev/bell_chargeback_v1.2.py')
+    bell_salesfeed_weekly_job >> bell_salesfeed >> bell_chargeback
